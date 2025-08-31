@@ -1,0 +1,61 @@
+import { GoogleGenAI } from "@google/genai";
+import { TranslationDirection } from '../types';
+
+if (!import.meta.env.VITE_API_KEY) {
+  throw new Error("API_KEY environment variable not set");
+}
+
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+
+const getPrompt = (content: string, direction: TranslationDirection, anonymize: boolean): string => {
+  const [sourceLanguage, targetLanguage] = direction === TranslationDirection.LaoToChinese 
+    ? ['Lao', 'Simplified Chinese'] 
+    : ['Chinese', 'Lao'];
+
+  const step3Instruction = targetLanguage === 'Lao'
+    ? `Step 3: Perform a final grammar and syntax check. Ensure the word order is correct according to Lao grammatical rules. Verify that the phrasing aligns with the conventional and commonly used expressions of a native Lao speaker. The tone should be appropriate for a standard document.`
+    : `Step 3: Perform a final grammar and idioms check. Ensure the translation is grammatically flawless and uses appropriate vocabulary for a standard document. Verify that the phrasing is natural and fluent for a native Simplified Chinese speaker.`;
+  
+  const step4Instruction = targetLanguage === 'Lao'
+    ? `Step 4: Anonymize the translated text. Scan the final Lao translation from Step 3 for any personally identifiable information (PII). Replace names with [ຊື່], national ID numbers or passport numbers with [ID_NUMBER], and phone numbers with [ເບີໂທລະສັບ]. Ensure only the sensitive data is replaced, leaving all other text intact.`
+    : `Step 4: Anonymize the translated text. Scan the final Chinese translation from Step 3 for any personally identifiable information (PII). Replace names with [姓名], identification numbers (like ID cards or passports) with [证件号码], and phone numbers with [联系电话]. Ensure only the sensitive data is replaced, leaving all other text intact.`;
+
+  return `
+You are an expert translation system. ${anonymize ? 'Your task is to translate the following document with the highest accuracy and then anonymize it. Follow this four-step process:' : 'Your task is to translate the following document with the highest accuracy. Follow this three-step process:'}
+
+Step 1: Perform a direct, literal translation of the text from ${sourceLanguage} to ${targetLanguage}. Do not output this result. This is just an intermediate step for your internal reference.
+
+Step 2: Review the literal translation from Step 1. As an expert linguist, revise and polish the text to correct any awkward phrasing, improve flow, and make it sound natural to a native ${targetLanguage} speaker.
+
+${step3Instruction}
+${anonymize ? `\n${step4Instruction}` : ''}
+
+The translation must be rigorous, accurate, and complete. Do not omit any details or simplify the content. Preserve the original formatting as much as possible, including line breaks and paragraphs.
+
+${anonymize ? 'The final output should ONLY be the fully anonymized translation from Step 4.' : 'The final output should ONLY be the polished translation from Step 3.'}
+
+--- DOCUMENT TO TRANSLATE ---
+
+${content}
+  `.trim();
+};
+
+export const translateDocumentStream = async (content: string, direction: TranslationDirection, anonymize: boolean) => {
+  try {
+    const prompt = getPrompt(content, direction, anonymize);
+
+    const responseStream = await ai.models.generateContentStream({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    
+    return responseStream;
+
+  } catch (error) {
+    console.error("Gemini API call failed:", error);
+    if (error instanceof Error) {
+        throw new Error(`Translation failed. API Error: ${error.message}`);
+    }
+    throw new Error("An unexpected error occurred while communicating with the translation service.");
+  }
+};

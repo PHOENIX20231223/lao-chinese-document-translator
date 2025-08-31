@@ -1,0 +1,5 @@
+{
+  "name": "Lao-Chinese Document Translator",
+  "description": "An application to translate documents between Lao and Chinese with high fidelity, allowing users to upload a document, select the translation direction, and download the translated result.",
+  "requestFramePermissions": []
+}
